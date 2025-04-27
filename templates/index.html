@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Weather App</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Extra styles for search suggestions */
+        #suggestions {
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            width: 85%;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
+        }
+        #suggestions li {
+            padding: 8px;
+            cursor: pointer;
+        }
+        #suggestions li:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Loader -->
+<div id="loader">
+    <div class="emoji">☁️</div>
+</div>
+
+<!-- Dynamic background -->
+<div class="dynamic-bg" id="dynamic-bg"></div>
+<div class="bg-overlay"></div>
+
+<div class="container">
+    <div class="weather-display" id="weather-display">
+        <div class="weather-icon">
+            {% if weather %}
+            <img src="{{ weather.icon_url }}" alt="Weather icon" class="weather-logo">
+            {% else %}
+            <img src="/static/icons/default-icon.png" alt="Weather icon" class="weather-logo">
+            {% endif %}
+        </div>
+
+        <div class="weather-info">
+            {% if weather %}
+            <h1 class="temperature">{{ weather.temp }}</h1>
+            <div class="location-info">
+                <h2>{{ weather.location }}</h2>
+                <p class="date-time">{{ today_date }}</p>
+            </div>
+            <div class="weather-details">
+                <p class="condition">{{ weather.condition }}</p>
+                <p class="humidity">Humidity: {{ weather.humidity }}</p>
+                <p class="wind">Wind: {{ weather.wind }}</p>
+                <p class="sunrise">Sunrise: {{ weather.sunrise }}</p>
+                <p class="sunset">Sunset: {{ weather.sunset }}</p>
+            </div>
+            {% else %}
+            <h1 class="temperature">--°C</h1>
+            <div class="location-info">
+                <h2>Location</h2>
+                <p class="date-time">City, Country</p>
+            </div>
+            <div class="weather-details">
+                <p class="condition">Weather condition</p>
+                <p class="humidity">Humidity: --%</p>
+                <p class="wind">Wind: -- km/h</p>
+                <p class="sunrise">Sunrise: --:--</p>
+                <p class="sunset">Sunset: --:--</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="search-panel">
+        <div class="search-container" style="position:relative;">
+            <form method="POST" autocomplete="off">
+                <input type="text" id="search-input" name="city" placeholder="Search location..." required>
+                <button type="submit" class="search-btn">Search</button>
+                <ul id="suggestions"></ul> <!-- Suggestion box here -->
+            </form>
+            <button type="button" id="detect-location" class="location-btn">📍 Auto-Detect</button>
+        </div>
+
+        <div class="recent-searches">
+            <h3>Recent search</h3>
+            <ul id="recent-search-list">
+                <!-- Filled dynamically -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- JavaScript -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const apiKey = '942ede6e8b41006a9e425153a47f42b5'; // Your OpenWeatherMap API Key
+        const searchInput = document.getElementById("search-input");
+        const suggestionsList = document.getElementById("suggestions");
+        const recentSearchList = document.getElementById("recent-search-list");
+        const form = document.querySelector("form");
+        const maxRecent = 6;
+
+        // Fetch suggestions using OpenWeatherMap Geocoding API
+        searchInput.addEventListener("input", async () => {
+            const query = searchInput.value.trim();
+            if (query.length < 2) {
+                suggestionsList.style.display = "none";
+                return;
+            }
+            try {
+                const res = await fetch(`http://api.openweathermap.org/geo/1.0/direct?q=${query}&limit=5&appid=${apiKey}`);
+                const data = await res.json();
+
+                suggestionsList.innerHTML = '';
+                if (data.length > 0) {
+                    data.forEach(location => {
+                        const li = document.createElement("li");
+                        li.textContent = `${location.name}${location.state ? ', ' + location.state : ''}, ${location.country}`;
+                        li.addEventListener("click", () => {
+                            searchInput.value = location.name;
+                            suggestionsList.style.display = "none";
+                            form.submit();
+                        });
+                        suggestionsList.appendChild(li);
+                    });
+                    suggestionsList.style.display = "block";
+                } else {
+                    suggestionsList.style.display = "none";
+                }
+            } catch (error) {
+                console.error("Error fetching suggestions:", error);
+            }
+        });
+
+        // Hide suggestions if clicked outside
+        document.addEventListener("click", (e) => {
+            if (!searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+                suggestionsList.style.display = "none";
+            }
+        });
+        function updateBackground(condition = null) {
+            const dynamicBg = document.getElementById('dynamic-bg');
+            const weatherDisplay = document.getElementById('weather-display');
+        
+            let backgroundImage = '/static/backgrounds/default.jpg';
+        
+            if (condition) {
+                condition = condition.toLowerCase();
+                if (condition.includes("clear") || condition.includes("sun")) {
+                    backgroundImage = '/static/backgrounds/clear.jpg';
+                } else if (condition.includes("cloud") || condition.includes("overcast")) {
+                    backgroundImage = '/static/backgrounds/cloud.jpg';
+                } else if (condition.includes("rain") || condition.includes("drizzle")) {
+                    backgroundImage = '/static/backgrounds/rain.jpg';
+                } else if (condition.includes("storm") || condition.includes("thunder")) {
+                    backgroundImage = '/static/backgrounds/storm.jpg';
+                } else if (condition.includes("snow") || condition.includes("sleet")) {
+                    backgroundImage = '/static/backgrounds/snow.jpg';
+                } else if (condition.includes("fog") || condition.includes("mist") || condition.includes("haze")) {
+                    backgroundImage = '/static/backgrounds/fog.jpg';
+                } else if (condition.includes("wind")) {
+                    backgroundImage = '/static/backgrounds/wind.jpg';
+                }
+            }
+        
+            // Update both backgrounds
+            dynamicBg.style.backgroundImage = `url('${backgroundImage}')`;
+            weatherDisplay.style.setProperty('--weather-bg', `url('${backgroundImage}')`);
+        }
+        // Auto-detect location using lat/lon
+        const geoBtn = document.getElementById("detect-location");
+        geoBtn.addEventListener("click", () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    try {
+                        const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+                        const data = await res.json();
+                        if (data.name) {
+                            searchInput.value = data.name;
+                            showToast(`📍 Detected: ${data.name}`);
+                            form.submit();
+                        } else {
+                            showToast('❌ Could not detect location');
+                        }
+                    } catch (error) {
+                        showToast('❌ Location detection failed');
+                    }
+                }, () => {
+                    showToast('❌ Location permission denied');
+                });
+            } else {
+                showToast('❌ Geolocation not supported');
+            }
+        });
+
+        // Load recent searches from localStorage
+        loadRecentSearches();
+
+        {% if weather %}
+        const newCity = "{{ weather.location.split(',')[0] }}"; // Only city name
+        addRecentSearch(newCity);
+        {% endif %}
+
+        function loadRecentSearches() {
+            let searches = JSON.parse(localStorage.getItem("recentSearches")) || [];
+            recentSearchList.innerHTML = '';
+            searches.forEach(city => {
+                const li = document.createElement("li");
+                li.textContent = city;
+                li.addEventListener("click", () => {
+                    searchInput.value = city;
+                    form.submit();
+                });
+                recentSearchList.appendChild(li);
+            });
+        }
+
+        function addRecentSearch(city) {
+            let searches = JSON.parse(localStorage.getItem("recentSearches")) || [];
+            searches = searches.filter(c => c.toLowerCase() !== city.toLowerCase());
+            searches.unshift(city);
+            if (searches.length > maxRecent) {
+                searches = searches.slice(0, maxRecent);
+            }
+            localStorage.setItem("recentSearches", JSON.stringify(searches));
+            loadRecentSearches();
+        }
+
+        window.addEventListener("load", () => {
+            document.body.classList.add("loaded");
+        });
+
+        {% if weather %}
+        showToast('🌦️ Weather updated!');
+        updateBackground('{{ weather.condition }}');
+        {% endif %}
+    });
+
+    function updateBackground(condition = null) { /* same */ }
+    function showToast(message) { /* same */ }
+</script>
+
+</body>
+</html>
